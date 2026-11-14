@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Predicción del rendimiento académico con una cadena de Markov de tres estados.">
+  <title>Rendimiento académico con cadenas de Markov</title>
+  <style>
+    :root {
+      --bg: #f3f0e8;
+      --surface: #fffdf8;
+      --ink: #1f2933;
+      --muted: #5f6b76;
+      --line: #d8d3c8;
+      --soft-line: #ece7dd;
+      --accent: #0f766e;
+      --accent-dark: #0b5751;
+      --error: #b91c1c;
+      --error-bg: #fef2f2;
+      --error-line: #fecaca;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      color-scheme: light;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+
+    .page {
+      width: min(1120px, 100% - 2rem);
+      margin: 0 auto;
+      padding: 2.5rem 0 3rem;
+    }
+
+    .hero {
+      margin-bottom: 1.5rem;
+    }
+
+    .eyebrow {
+      margin: 0 0 0.4rem;
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 6vw, 3.4rem);
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+    }
+
+    .lead {
+      max-width: 62ch;
+      margin: 0.8rem 0 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .panel,
+    .table-wrap,
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+    }
+
+    .panel {
+      padding: 1.25rem;
+      box-shadow: 0 10px 30px rgb(31 41 51 / 5%);
+    }
+
+    .panel h2,
+    .results h2 {
+      margin: 0 0 1rem;
+      font-size: 1.1rem;
+    }
+
+    .model-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-weight: 600;
+    }
+
+    select,
+    input[type="number"] {
+      width: 100%;
+      padding: 0.55rem 0.6rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    select:focus-visible,
+    input:focus-visible,
+    button:focus-visible {
+      border-color: var(--accent);
+      outline: 3px solid rgb(15 118 110 / 28%);
+      outline-offset: 1px;
+    }
+
+    .hint {
+      margin: 0.45rem 0 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .matrix-block {
+      min-width: 0;
+    }
+
+    .matrix {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0.35rem;
+      table-layout: fixed;
+    }
+
+    .matrix caption {
+      padding-bottom: 0.35rem;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .matrix th {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .matrix tbody th {
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .matrix td {
+      padding: 0;
+    }
+
+    .matrix input {
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+      align-items: center;
+      margin-top: 1rem;
+    }
+
+    .actions button {
+      padding: 0.65rem 1.2rem;
+      border: 0;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    .actions button:hover {
+      background: var(--accent-dark);
+    }
+
+    .actions .hint {
+      margin: 0;
+    }
+
+    #error {
+      margin-top: 1rem;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--error-line);
+      border-radius: 12px;
+      background: var(--error-bg);
+      color: var(--error);
+    }
+
+    #error[hidden] {
+      display: none;
+    }
+
+    .results {
+      margin-top: 1.5rem;
+    }
+
+    .results[hidden] {
+      display: none;
+    }
+
+    .table-wrap {
+      padding: 0.35rem;
+    }
+
+    #results-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #results-table th,
+    #results-table td {
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--soft-line);
+      text-align: right;
+    }
+
+    #results-table thead th {
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    #results-table th:first-child,
+    #results-table td:first-child {
+      width: 15%;
+      text-align: left;
+    }
+
+    #results-table tbody th {
+      font-weight: 600;
+    }
+
+    #results-table tbody tr:last-child > * {
+      border-bottom: 0;
+    }
+
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .chart-card {
+      min-width: 0;
+      margin: 0;
+      padding: 1rem;
+    }
+
+    .chart-card h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .chart-card p {
+      margin: 0.25rem 0 0.75rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .chart svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .chart text {
+      fill: var(--muted);
+      font-family: inherit;
+    }
+
+    .chart .axis-label {
+      font-size: 11px;
+    }
+
+    .chart .tick-label {
+      font-size: 10px;
+    }
+
+    .chart .legend-label {
+      fill: var(--ink);
+      font-size: 11px;
+    }
+
+    .note {
+      margin: 1.5rem 0 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 760px) {
+      .model-grid,
+      .charts {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .page {
+        width: min(1120px, 100% - 1rem);
+        padding-top: 1.25rem;
+      }
+
+      .panel {
+        padding: 1rem;
+      }
+
+      .matrix {
+        border-spacing: 0.25rem;
+      }
+
+      .table-wrap {
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+
+      #results-table,
+      #results-table tbody,
+      #results-table tr,
+      #results-table th,
+      #results-table td {
+        display: block;
+        width: 100%;
+      }
+
+      #results-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+      }
+
+      #results-table tbody {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      #results-table tr {
+        padding: 0.5rem 0.8rem;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--surface);
+      }
+
+      #results-table tbody th,
+      #results-table td {
+        display: flex;
+        gap: 1rem;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 0.4rem 0;
+        border-bottom: 1px solid var(--soft-line);
+        text-align: right;
+      }
+
+      #results-table tbody tr > *:last-child {
+        border-bottom: 0;
+      }
+
+      #results-table tbody th {
+        font-size: 1.02rem;
+      }
+
+      #results-table td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">Cadenas de Markov</p>
+      <h1>Mi rendimiento académico</h1>
+      <p class="lead">
+        Elijo un estado inicial y ajusto la matriz de transición. La página calcula cómo podrían
+        cambiar las probabilidades de Alto, Medio y Bajo con el tiempo.
+      </p>
+    </header>
+
+    <section class="panel" aria-labelledby="modelo-title">
+      <h2 id="modelo-title">Modelo</h2>
+
+      <form id="model-form" novalidate>
+        <div class="model-grid">
+          <div class="field">
+            <label for="initial-state">Estado inicial</label>
+            <select id="initial-state" name="initial-state">
+              <option value="0" selected>Alto</option>
+              <option value="1">Medio</option>
+              <option value="2">Bajo</option>
+            </select>
+            <p class="hint">El vector inicial arranca con 1 en este estado y 0 en los demás.</p>
+          </div>
+
+          <div class="matrix-block">
+            <table class="matrix" aria-describedby="matrix-help">
+              <caption>Matriz de transición</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Desde \ Hacia</th>
+                  <th scope="col">Alto</th>
+                  <th scope="col">Medio</th>
+                  <th scope="col">Bajo</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Alto</th>
+                  <td>
+                    <label class="sr-only" for="p-0-0">Probabilidad de Alto a Alto</label>
+                    <input id="p-0-0" data-row="0" data-column="0" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.70">
+                  </td>
+                  <td>
+                    <label class="sr-only" for="p-0-1">Probabilidad de Alto a Medio</label>
+                    <input id="p-0-1" data-row="0" data-column="1" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.25">
+                  </td>
+                  <td>
+                    <label class="sr-only" for="p-0-2">Probabilidad de Alto a Bajo</label>
+                    <input id="p-0-2" data-row="0" data-column="2" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.05">
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">Medio</th>
+                  <td>
+                    <label class="sr-only" for="p-1-0">Probabilidad de Medio a Alto</label>
+                    <input id="p-1-0" data-row="1" data-column="0" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.20">
+                  </td>
+                  <td>
+                    <label class="sr-only" for="p-1-1">Probabilidad de Medio a Medio</label>
+                    <input id="p-1-1" data-row="1" data-column="1" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.55">
+                  </td>
+                  <td>
+                    <label class="sr-only" for="p-1-2">Probabilidad de Medio a Bajo</label>
+                    <input id="p-1-2" data-row="1" data-column="2" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.25">
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">Bajo</th>
+                  <td>
+                    <label class="sr-only" for="p-2-0">Probabilidad de Bajo a Alto</label>
+                    <input id="p-2-0" data-row="2" data-column="0" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.05">
+                  </td>
+                  <td>
+                    <label class="sr-only" for="p-2-1">Probabilidad de Bajo a Medio</label>
+                    <input id="p-2-1" data-row="2" data-column="1" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.35">
+                  </td>
+                  <td>
+                    <label class="sr-only" for="p-2-2">Probabilidad de Bajo a Bajo</label>
+                    <input id="p-2-2" data-row="2" data-column="2" type="number" inputmode="decimal" step="0.01" min="0" max="1" value="0.60">
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="hint" id="matrix-help">
+              Cada fila debe sumar 1 y no puede tener números negativos. Tolerancia: 0.001.
+            </p>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit">Calcular</button>
+          <p class="hint">Los resultados se actualizan al cambiar un valor.</p>
+        </div>
+      </form>
+
+      <div id="error" role="alert" hidden></div>
+    </section>
+
+    <section class="results" id="results" aria-labelledby="resultados-title" hidden>
+      <h2 id="resultados-title">Resultados</h2>
+
+      <div class="table-wrap">
+        <table id="results-table">
+          <caption class="sr-only">Probabilidades por estado para cada cantidad de pasos</caption>
+          <thead>
+            <tr>
+              <th scope="col">Estado</th>
+              <th scope="col">1 paso</th>
+              <th scope="col">3 pasos</th>
+              <th scope="col">5 pasos</th>
+              <th scope="col">10 pasos</th>
+              <th scope="col">Estacionaria</th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+      </div>
+
+      <div class="charts">
+        <figure class="chart-card">
+          <figcaption>
+            <h3>Barras por paso</h3>
+            <p>Probabilidad de cada estado en los pasos 1, 3, 5 y 10.</p>
+          </figcaption>
+          <div id="bar-chart" class="chart"></div>
+        </figure>
+
+        <figure class="chart-card">
+          <figcaption>
+            <h3>Líneas de 0 a 10 pasos</h3>
+            <p>Evolución de cada estado desde el vector inicial.</p>
+          </figcaption>
+          <div id="line-chart" class="chart"></div>
+        </figure>
+      </div>
+    </section>
+
+    <p class="note">
+      La matriz por defecto es inventada. No son datos reales.
+    </p>
+  </main>
+
+  <script src="markov.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
